@@ -1,0 +1,672 @@
+commit f2c90fbb44bf8e2d0898e888e181740a176f3482
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Wed Jul 29 23:22:44 2026 +0000
+
+    Changes
+
+diff --git a/src/components/HeroReveal.tsx b/src/components/HeroReveal.tsx
+index cce83e0..0859137 100644
+--- a/src/components/HeroReveal.tsx
++++ b/src/components/HeroReveal.tsx
+@@ -1,5 +1,5 @@
+ import { useCallback, useEffect, useRef, useState } from "react";
+-import heroPortrait from "@/assets/hero-portrait.jpg";
++import heroAsset from "@/assets/fundo.jpg.asset.json";
+ 
+ const KICKER = "Nem toda marca precisa de um novo design.";
+ const TITLE_A = "Algumas precisam ser ";
+@@ -10,10 +10,14 @@ const PARAGRAPH =
+ 
+ const NAV = ["Início", "Metodologia", "Análises", "Casos", "Projetos", "Sobre", "Contato"];
+ 
++/** Safe horizontal gutter — 378px on a 1920px monitor, never cramped on smaller ones. */
++const EDGE = "clamp(24px, 19.7vw, 378px)";
++
+ /** Lens geometry, as fractions of the viewport. */
+ const LENS = { left: 0.617, top: 0.225, width: 0.118, height: 0.545 };
+ 
+-const IMG_TRANSFORM = "translate(20%, 10%) scale(1.15)";
++/** Text column: from the left gutter up to a safe distance before the lens. */
++const COL_WIDTH = `calc(${LENS.left * 100}% - ${EDGE} - 5vw)`;
+ 
+ const clamp = (v: number, min = 0, max = 1) => Math.min(max, Math.max(min, v));
+ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+@@ -26,6 +30,7 @@ export default function HeroReveal() {
+ 
+   const [progress, setProgress] = useState(0);
+   const [typed, setTyped] = useState(0);
++  const [dragging, setDragging] = useState(false);
+ 
+   // ---- scroll progress -----------------------------------------------------
+   useEffect(() => {
+@@ -51,10 +56,10 @@ export default function HeroReveal() {
+     };
+   }, []);
+ 
+-  // reveal = image clearing up; typing starts after the reveal is complete
+-  const reveal = easeOut(clamp(progress / 0.55));
++  // reveal = image clearing up; text transition starts on the very first scroll
++  const reveal = easeOut(clamp(progress / 0.5));
+   const focused = reveal >= 0.999;
+-  const textIn = easeOut(clamp((progress - 0.28) / 0.3));
++  const textIn = easeOut(clamp(progress / 0.42));
+ 
+   // ---- typing --------------------------------------------------------------
+   useEffect(() => {
+@@ -76,11 +81,11 @@ export default function HeroReveal() {
+ 
+   const titleDone = typed >= FULL_TITLE.length;
+ 
+-  // ---- magic lens tracking -------------------------------------------------
++  // ---- magic lens tracking (only while the pointer is held down) -----------
+   const target = useRef({ x: 0, y: 0 });
+   const current = useRef({ x: 0, y: 0 });
+   const active = useRef(false);
+-  active.current = focused;
++  active.current = focused && dragging;
+ 
+   const applyLens = useCallback(() => {
+     const { x, y } = current.current;
+@@ -93,14 +98,14 @@ export default function HeroReveal() {
+     let raf = 0;
+     const loop = () => {
+       const t = active.current ? target.current : { x: 0, y: 0 };
+-      current.current.x = lerp(current.current.x, t.x, 0.09);
+-      current.current.y = lerp(current.current.y, t.y, 0.09);
++      current.current.x = lerp(current.current.x, t.x, 0.12);
++      current.current.y = lerp(current.current.y, t.y, 0.12);
+       applyLens();
+       raf = requestAnimationFrame(loop);
+     };
+     raf = requestAnimationFrame(loop);
+ 
+-    const onMove = (e: MouseEvent) => {
++    const track = (e: PointerEvent) => {
+       const w = window.innerWidth;
+       const h = window.innerHeight;
+       const baseCx = (LENS.left + LENS.width / 2) * w;
+@@ -111,10 +116,26 @@ export default function HeroReveal() {
+       const cy = clamp(e.clientY, halfH, h - halfH);
+       target.current = { x: cx - baseCx, y: cy - baseCy };
+     };
+-    window.addEventListener("mousemove", onMove);
++
++    const onDown = (e: PointerEvent) => {
++      track(e);
++      setDragging(true);
++    };
++    const onMove = (e: PointerEvent) => {
++      if (active.current) track(e);
++    };
++    const onUp = () => setDragging(false);
++
++    window.addEventListener("pointerdown", onDown);
++    window.addEventListener("pointermove", onMove);
++    window.addEventListener("pointerup", onUp);
++    window.addEventListener("pointercancel", onUp);
+     return () => {
+       cancelAnimationFrame(raf);
+-      window.removeEventListener("mousemove", onMove);
++      window.removeEventListener("pointerdown", onDown);
++      window.removeEventListener("pointermove", onMove);
++      window.removeEventListener("pointerup", onUp);
++      window.removeEventListener("pointercancel", onUp);
+     };
+   }, [applyLens]);
+ 
+@@ -124,26 +145,27 @@ export default function HeroReveal() {
+   const lensBlur = lerp(26, 0, reveal);
+   const lensOpacity = lerp(0.35, 1, reveal);
+ 
+-  const kickerSize = lerp(1.45, 0.78, textIn);
+-  const kickerLeft = lerp(40, 32.55, textIn);
+-  const kickerTop = lerp(50, 21.6, textIn);
+-  const kickerTrack = lerp(0.42, 0.2, textIn);
++  const kickerSize = lerp(1.4, 0.78, textIn);
++  const kickerTop = lerp(48, 21.6, textIn);
++  const kickerTrack = lerp(0.36, 0.2, textIn);
+ 
+   return (
+     <section ref={sectionRef} className="relative h-[420vh] bg-background">
+-      <div className="sticky top-0 h-screen w-full overflow-hidden bg-background grain">
++      <div
++        className="sticky top-0 h-screen w-full overflow-hidden bg-background grain"
++        style={{ cursor: focused ? (dragging ? "grabbing" : "grab") : "default" }}
++      >
+         {/* blurred base image */}
+         <div
+           className="absolute inset-0 will-change-[filter,opacity]"
+           style={{ opacity: bgOpacity, filter: `blur(${bgBlur}px) saturate(0.95)` }}
+         >
+           <img
+-            src={heroPortrait}
+-            alt="Retrato em contraluz dourada sobre fundo escuro"
+-            width={1536}
+-            height={1024}
+-            className="h-full w-full object-cover object-[46%_40%]"
+-            style={{ transform: IMG_TRANSFORM }}
++            src={heroAsset.url}
++            alt="Retrato em contraluz sobre fundo escuro"
++            width={1600}
++            height={583}
++            className="h-full w-full scale-105 object-cover object-[46%_42%]"
+           />
+         </div>
+         <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_18%_50%,var(--background)_38%,transparent_78%)]" />
+@@ -177,12 +199,11 @@ export default function HeroReveal() {
+               }}
+             >
+               <img
+-                src={heroPortrait}
++                src={heroAsset.url}
+                 alt=""
+-                width={1536}
+-                height={1024}
+-                className="h-full w-full object-cover object-[46%_40%]"
+-                style={{ transform: IMG_TRANSFORM }}
++                width={1600}
++                height={583}
++                className="h-full w-full scale-105 object-cover object-[46%_42%]"
+               />
+             </div>
+           </div>
+@@ -210,12 +231,24 @@ export default function HeroReveal() {
+             </p>
+             <p className="text-[0.78rem] font-medium tracking-[0.06em]">revelar</p>
+           </div>
++
++          {/* explore hint, inside the lens, once fully sharp */}
++          <div
++            className="absolute inset-x-0 bottom-6 px-4 text-center transition-opacity duration-500"
++            style={{ opacity: focused && !dragging ? 1 : 0, pointerEvents: "none" }}
++          >
++            <span className="inline-block rounded-full bg-background/55 px-3 py-2 text-[0.68rem] font-light leading-snug tracking-[0.08em] text-foreground/90 backdrop-blur-md">
++              Clique e segure para
++              <br />
++              explorar a imagem revelada
++            </span>
++          </div>
+         </div>
+ 
+         {/* nav */}
+         <header
+-          className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-[3.2vw] py-8"
+-          style={{ opacity: textIn }}
++          className="absolute inset-x-0 top-0 z-20 flex items-center justify-between py-8"
++          style={{ opacity: textIn, paddingLeft: EDGE, paddingRight: EDGE }}
+         >
+           <span className="font-serif text-[1.05rem] tracking-[0.3em] text-foreground">
+             MARCOS FONSECA
+@@ -231,12 +264,14 @@ export default function HeroReveal() {
+ 
+         {/* kicker phrase */}
+         <p
+-          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-extralight text-foreground/85"
++          className="absolute z-10 font-extralight text-foreground/85"
+           style={{
+-            left: `${kickerLeft}%`,
++            left: EDGE,
+             top: `${kickerTop}%`,
++            width: COL_WIDTH,
+             fontSize: `${kickerSize}rem`,
+             letterSpacing: `${kickerTrack}em`,
++            lineHeight: 1.5,
+             opacity: lerp(1, 0.68, textIn),
+           }}
+         >
+@@ -245,10 +280,10 @@ export default function HeroReveal() {
+ 
+         {/* title + paragraph */}
+         <div
+-          className="absolute z-10 w-[37%]"
+-          style={{ left: "21.8%", top: "25.5%", opacity: focused ? 1 : 0 }}
++          className="absolute z-10"
++          style={{ left: EDGE, top: "25.5%", width: COL_WIDTH, opacity: focused ? 1 : 0 }}
+         >
+-          <h1 className="font-serif text-[3.6vw] leading-[1.12] text-foreground">
++          <h1 className="font-serif text-[3.4vw] font-normal leading-[1.14] text-foreground">
+             <span className="block">
+               {FULL_TITLE.slice(0, Math.min(typed, TITLE_A.length))}
+               {typed <= TITLE_A.length && <span className="caret" />}
+@@ -268,8 +303,8 @@ export default function HeroReveal() {
+ 
+         {/* bottom cue after reveal */}
+         <div
+-          className="absolute bottom-10 left-[34%] z-10 text-foreground"
+-          style={{ opacity: titleDone ? 0.9 : 0 }}
++          className="absolute bottom-10 z-10 text-foreground"
++          style={{ left: EDGE, opacity: titleDone ? 0.9 : 0 }}
+         >
+           <svg
+             viewBox="0 0 24 32"
+
+commit 5a0e555fe0352b8a15eac2ef38ecd917d79f3ed6
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Wed Jul 29 23:04:33 2026 +0000
+
+    Changes
+
+diff --git a/src/components/HeroReveal.tsx b/src/components/HeroReveal.tsx
+index 2088360..cce83e0 100644
+--- a/src/components/HeroReveal.tsx
++++ b/src/components/HeroReveal.tsx
+@@ -13,7 +13,7 @@ const NAV = ["Início", "Metodologia", "Análises", "Casos", "Projetos", "Sobre"
+ /** Lens geometry, as fractions of the viewport. */
+ const LENS = { left: 0.617, top: 0.225, width: 0.118, height: 0.545 };
+ 
+-const IMG_TRANSFORM = "translate(22%, 14%) scale(1.25)";
++const IMG_TRANSFORM = "translate(20%, 10%) scale(1.15)";
+ 
+ const clamp = (v: number, min = 0, max = 1) => Math.min(max, Math.max(min, v));
+ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+commit bf6ca5ff7cc81d19ded1820ccd05073024d75414
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Wed Jul 29 23:03:18 2026 +0000
+
+    Changes
+
+diff --git a/src/components/HeroReveal.tsx b/src/components/HeroReveal.tsx
+index a2896ac..2088360 100644
+--- a/src/components/HeroReveal.tsx
++++ b/src/components/HeroReveal.tsx
+@@ -13,6 +13,8 @@ const NAV = ["Início", "Metodologia", "Análises", "Casos", "Projetos", "Sobre"
+ /** Lens geometry, as fractions of the viewport. */
+ const LENS = { left: 0.617, top: 0.225, width: 0.118, height: 0.545 };
+ 
++const IMG_TRANSFORM = "translate(22%, 14%) scale(1.25)";
++
+ const clamp = (v: number, min = 0, max = 1) => Math.min(max, Math.max(min, v));
+ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+@@ -140,7 +142,8 @@ export default function HeroReveal() {
+             alt="Retrato em contraluz dourada sobre fundo escuro"
+             width={1536}
+             height={1024}
+-            className="h-full w-full scale-[1.25] translate-x-[18%] translate-y-[13%] object-cover object-[46%_40%]"
++            className="h-full w-full object-cover object-[46%_40%]"
++            style={{ transform: IMG_TRANSFORM }}
+           />
+         </div>
+         <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_18%_50%,var(--background)_38%,transparent_78%)]" />
+@@ -178,7 +181,8 @@ export default function HeroReveal() {
+                 alt=""
+                 width={1536}
+                 height={1024}
+-                className="h-full w-full scale-[1.25] translate-x-[18%] translate-y-[13%] object-cover object-[46%_40%]"
++                className="h-full w-full object-cover object-[46%_40%]"
++                style={{ transform: IMG_TRANSFORM }}
+               />
+             </div>
+           </div>
+
+commit 17f679cd3a697349af5704f0c384fb38ed68a56f
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Wed Jul 29 23:01:23 2026 +0000
+
+    Changes
+
+diff --git a/src/components/HeroReveal.tsx b/src/components/HeroReveal.tsx
+index abe12b9..a2896ac 100644
+--- a/src/components/HeroReveal.tsx
++++ b/src/components/HeroReveal.tsx
+@@ -140,7 +140,7 @@ export default function HeroReveal() {
+             alt="Retrato em contraluz dourada sobre fundo escuro"
+             width={1536}
+             height={1024}
+-            className="h-full w-full scale-[1.5] translate-x-[24%] translate-y-[15%] object-cover object-[46%_40%]"
++            className="h-full w-full scale-[1.25] translate-x-[18%] translate-y-[13%] object-cover object-[46%_40%]"
+           />
+         </div>
+         <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_18%_50%,var(--background)_38%,transparent_78%)]" />
+@@ -178,7 +178,7 @@ export default function HeroReveal() {
+                 alt=""
+                 width={1536}
+                 height={1024}
+-                className="h-full w-full scale-[1.5] translate-x-[24%] translate-y-[15%] object-cover object-[46%_40%]"
++                className="h-full w-full scale-[1.25] translate-x-[18%] translate-y-[13%] object-cover object-[46%_40%]"
+               />
+             </div>
+           </div>
+
+commit ead279860f3782159fc19d76a3bcc59c146a6172
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Wed Jul 29 22:59:47 2026 +0000
+
+    Changes
+
+diff --git a/src/components/HeroReveal.tsx b/src/components/HeroReveal.tsx
+index e611625..abe12b9 100644
+--- a/src/components/HeroReveal.tsx
++++ b/src/components/HeroReveal.tsx
+@@ -140,7 +140,7 @@ export default function HeroReveal() {
+             alt="Retrato em contraluz dourada sobre fundo escuro"
+             width={1536}
+             height={1024}
+-            className="h-full w-full scale-110 object-cover object-[62%_38%]"
++            className="h-full w-full scale-[1.5] translate-x-[24%] translate-y-[15%] object-cover object-[46%_40%]"
+           />
+         </div>
+         <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_18%_50%,var(--background)_38%,transparent_78%)]" />
+@@ -178,7 +178,7 @@ export default function HeroReveal() {
+                 alt=""
+                 width={1536}
+                 height={1024}
+-                className="h-full w-full scale-110 object-cover object-[62%_38%]"
++                className="h-full w-full scale-[1.5] translate-x-[24%] translate-y-[15%] object-cover object-[46%_40%]"
+               />
+             </div>
+           </div>
+@@ -241,10 +241,10 @@ export default function HeroReveal() {
+ 
+         {/* title + paragraph */}
+         <div
+-          className="absolute z-10 w-[32%]"
++          className="absolute z-10 w-[37%]"
+           style={{ left: "21.8%", top: "25.5%", opacity: focused ? 1 : 0 }}
+         >
+-          <h1 className="font-serif text-[4.1vw] leading-[1.12] text-foreground">
++          <h1 className="font-serif text-[3.6vw] leading-[1.12] text-foreground">
+             <span className="block">
+               {FULL_TITLE.slice(0, Math.min(typed, TITLE_A.length))}
+               {typed <= TITLE_A.length && <span className="caret" />}
+
+commit 055ac4cd3e16d54cf30ed71523a9be04145f04c4
+Author: gpt-engineer-app[bot] <159125892+gpt-engineer-app[bot]@users.noreply.github.com>
+Date:   Wed Jul 29 22:58:45 2026 +0000
+
+    Changes
+
+diff --git a/src/components/HeroReveal.tsx b/src/components/HeroReveal.tsx
+new file mode 100644
+index 0000000..e611625
+--- /dev/null
++++ b/src/components/HeroReveal.tsx
+@@ -0,0 +1,287 @@
++import { useCallback, useEffect, useRef, useState } from "react";
++import heroPortrait from "@/assets/hero-portrait.jpg";
++
++const KICKER = "Nem toda marca precisa de um novo design.";
++const TITLE_A = "Algumas precisam ser ";
++const TITLE_B = "verdadeiramente compreendidas.";
++const FULL_TITLE = TITLE_A + TITLE_B;
++const PARAGRAPH =
++  "Investigo o que impede marcas, profissionais e projetos de serem percebidos pelo valor que realmente possuem — e transformo essa descoberta em direção, sistemas e expressão visual.";
++
++const NAV = ["Início", "Metodologia", "Análises", "Casos", "Projetos", "Sobre", "Contato"];
++
++/** Lens geometry, as fractions of the viewport. */
++const LENS = { left: 0.617, top: 0.225, width: 0.118, height: 0.545 };
++
++const clamp = (v: number, min = 0, max = 1) => Math.min(max, Math.max(min, v));
++const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
++const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
++
++export default function HeroReveal() {
++  const sectionRef = useRef<HTMLElement>(null);
++  const lensRef = useRef<HTMLDivElement>(null);
++  const lensInnerRef = useRef<HTMLDivElement>(null);
++
++  const [progress, setProgress] = useState(0);
++  const [typed, setTyped] = useState(0);
++
++  // ---- scroll progress -----------------------------------------------------
++  useEffect(() => {
++    let frame = 0;
++    const update = () => {
++      frame = 0;
++      const el = sectionRef.current;
++      if (!el) return;
++      const total = el.offsetHeight - window.innerHeight;
++      const p = total > 0 ? clamp(-el.getBoundingClientRect().top / total) : 0;
++      setProgress(p);
++    };
++    const onScroll = () => {
++      if (!frame) frame = requestAnimationFrame(update);
++    };
++    update();
++    window.addEventListener("scroll", onScroll, { passive: true });
++    window.addEventListener("resize", onScroll);
++    return () => {
++      window.removeEventListener("scroll", onScroll);
++      window.removeEventListener("resize", onScroll);
++      if (frame) cancelAnimationFrame(frame);
++    };
++  }, []);
++
++  // reveal = image clearing up; typing starts after the reveal is complete
++  const reveal = easeOut(clamp(progress / 0.55));
++  const focused = reveal >= 0.999;
++  const textIn = easeOut(clamp((progress - 0.28) / 0.3));
++
++  // ---- typing --------------------------------------------------------------
++  useEffect(() => {
++    if (!focused) {
++      setTyped(0);
++      return;
++    }
++    const id = window.setInterval(() => {
++      setTyped((n) => {
++        if (n >= FULL_TITLE.length) {
++          window.clearInterval(id);
++          return n;
++        }
++        return n + 1;
++      });
++    }, 34);
++    return () => window.clearInterval(id);
++  }, [focused]);
++
++  const titleDone = typed >= FULL_TITLE.length;
++
++  // ---- magic lens tracking -------------------------------------------------
++  const target = useRef({ x: 0, y: 0 });
++  const current = useRef({ x: 0, y: 0 });
++  const active = useRef(false);
++  active.current = focused;
++
++  const applyLens = useCallback(() => {
++    const { x, y } = current.current;
++    if (lensRef.current) lensRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
++    if (lensInnerRef.current)
++      lensInnerRef.current.style.transform = `translate3d(${-x}px, ${-y}px, 0)`;
++  }, []);
++
++  useEffect(() => {
++    let raf = 0;
++    const loop = () => {
++      const t = active.current ? target.current : { x: 0, y: 0 };
++      current.current.x = lerp(current.current.x, t.x, 0.09);
++      current.current.y = lerp(current.current.y, t.y, 0.09);
++      applyLens();
++      raf = requestAnimationFrame(loop);
++    };
++    raf = requestAnimationFrame(loop);
++
++    const onMove = (e: MouseEvent) => {
++      const w = window.innerWidth;
++      const h = window.innerHeight;
++      const baseCx = (LENS.left + LENS.width / 2) * w;
++      const baseCy = (LENS.top + LENS.height / 2) * h;
++      const halfW = (LENS.width * w) / 2;
++      const halfH = (LENS.height * h) / 2;
++      const cx = clamp(e.clientX, halfW, w - halfW);
++      const cy = clamp(e.clientY, halfH, h - halfH);
++      target.current = { x: cx - baseCx, y: cy - baseCy };
++    };
++    window.addEventListener("mousemove", onMove);
++    return () => {
++      cancelAnimationFrame(raf);
++      window.removeEventListener("mousemove", onMove);
++    };
++  }, [applyLens]);
++
++  // ---- derived visuals -----------------------------------------------------
++  const bgOpacity = lerp(0.1, 0.72, reveal);
++  const bgBlur = lerp(46, 20, reveal);
++  const lensBlur = lerp(26, 0, reveal);
++  const lensOpacity = lerp(0.35, 1, reveal);
++
++  const kickerSize = lerp(1.45, 0.78, textIn);
++  const kickerLeft = lerp(40, 32.55, textIn);
++  const kickerTop = lerp(50, 21.6, textIn);
++  const kickerTrack = lerp(0.42, 0.2, textIn);
++
++  return (
++    <section ref={sectionRef} className="relative h-[420vh] bg-background">
++      <div className="sticky top-0 h-screen w-full overflow-hidden bg-background grain">
++        {/* blurred base image */}
++        <div
++          className="absolute inset-0 will-change-[filter,opacity]"
++          style={{ opacity: bgOpacity, filter: `blur(${bgBlur}px) saturate(0.95)` }}
++        >
++          <img
++            src={heroPortrait}
++            alt="Retrato em contraluz dourada sobre fundo escuro"
++            width={1536}
++            height={1024}
++            className="h-full w-full scale-110 object-cover object-[62%_38%]"
++          />
++        </div>
++        <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_18%_50%,var(--background)_38%,transparent_78%)]" />
++
++        {/* magic lens */}
++        <div
++          ref={lensRef}
++          className="absolute overflow-hidden rounded-[14px] will-change-transform"
++          style={{
++            left: `${LENS.left * 100}%`,
++            top: `${LENS.top * 100}%`,
++            width: `${LENS.width * 100}%`,
++            height: `${LENS.height * 100}%`,
++            opacity: lensOpacity,
++            boxShadow: focused
++              ? "0 30px 90px -30px rgba(0,0,0,0.9)"
++              : "0 0 0 1px rgba(255,255,255,0.12)",
++            outline: focused ? "none" : "1px dashed rgba(255,255,255,0.22)",
++            outlineOffset: "6px",
++          }}
++        >
++          <div ref={lensInnerRef} className="absolute inset-0 will-change-transform">
++            <div
++              className="absolute"
++              style={{
++                left: `${-LENS.left * 100}vw`,
++                top: `${-LENS.top * 100}vh`,
++                width: "100vw",
++                height: "100vh",
++                filter: `blur(${lensBlur}px)`,
++              }}
++            >
++              <img
++                src={heroPortrait}
++                alt=""
++                width={1536}
++                height={1024}
++                className="h-full w-full scale-110 object-cover object-[62%_38%]"
++              />
++            </div>
++          </div>
++
++          {/* scroll cue, inside the lens */}
++          <div
++            className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col items-center text-foreground"
++            style={{ opacity: clamp(1 - reveal * 2.4), pointerEvents: "none" }}
++          >
++            <svg
++              viewBox="0 0 24 32"
++              className="h-8 w-6 cue-anim"
++              fill="none"
++              stroke="currentColor"
++              strokeWidth="1.4"
++              strokeLinecap="round"
++              strokeLinejoin="round"
++            >
++              <path d="M12 3c2.2 0 4 1.8 4 4s-1.8 4-4 4-4-1.8-4-4 1.8-4 4-4z" />
++              <path d="M12 9v14" />
++              <path d="M8.5 19.5 12 23.5l3.5-4" />
++            </svg>
++            <p className="mt-4 text-[0.72rem] font-extralight tracking-[0.12em] text-foreground/70">
++              Desça para
++            </p>
++            <p className="text-[0.78rem] font-medium tracking-[0.06em]">revelar</p>
++          </div>
++        </div>
++
++        {/* nav */}
++        <header
++          className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-[3.2vw] py-8"
++          style={{ opacity: textIn }}
++        >
++          <span className="font-serif text-[1.05rem] tracking-[0.3em] text-foreground">
++            MARCOS FONSECA
++          </span>
++          <nav className="flex items-center gap-7 text-[0.86rem] font-light text-foreground/85">
++            {NAV.map((item) => (
++              <a key={item} href="#" className="transition-colors hover:text-gold">
++                {item}
++              </a>
++            ))}
++          </nav>
++        </header>
++
++        {/* kicker phrase */}
++        <p
++          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-extralight text-foreground/85"
++          style={{
++            left: `${kickerLeft}%`,
++            top: `${kickerTop}%`,
++            fontSize: `${kickerSize}rem`,
++            letterSpacing: `${kickerTrack}em`,
++            opacity: lerp(1, 0.68, textIn),
++          }}
++        >
++          {KICKER}
++        </p>
++
++        {/* title + paragraph */}
++        <div
++          className="absolute z-10 w-[32%]"
++          style={{ left: "21.8%", top: "25.5%", opacity: focused ? 1 : 0 }}
++        >
++          <h1 className="font-serif text-[4.1vw] leading-[1.12] text-foreground">
++            <span className="block">
++              {FULL_TITLE.slice(0, Math.min(typed, TITLE_A.length))}
++              {typed <= TITLE_A.length && <span className="caret" />}
++            </span>
++            <span className="block italic text-gold">
++              {typed > TITLE_A.length ? FULL_TITLE.slice(TITLE_A.length, typed) : ""}
++              {typed > TITLE_A.length && <span className="caret" />}
++            </span>
++          </h1>
++          <p
++            className="mt-6 max-w-[30rem] text-justify text-[0.95rem] font-light leading-relaxed text-foreground/80 transition-opacity duration-700"
++            style={{ opacity: titleDone ? 1 : 0 }}
++          >
++            {PARAGRAPH}
++          </p>
++        </div>
++
++        {/* bottom cue after reveal */}
++        <div
++          className="absolute bottom-10 left-[34%] z-10 text-foreground"
++          style={{ opacity: titleDone ? 0.9 : 0 }}
++        >
++          <svg
++            viewBox="0 0 24 32"
++            className="h-8 w-6 cue-anim"
++            fill="none"
++            stroke="currentColor"
++            strokeWidth="1.4"
++            strokeLinecap="round"
++            strokeLinejoin="round"
++          >
++            <path d="M12 3c2.2 0 4 1.8 4 4s-1.8 4-4 4-4-1.8-4-4 1.8-4 4-4z" />
++            <path d="M12 9v14" />
++            <path d="M8.5 19.5 12 23.5l3.5-4" />
++          </svg>
++        </div>
++      </div>
++    </section>
++  );
++}
